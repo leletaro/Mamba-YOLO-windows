@@ -2,6 +2,8 @@
 
 *A step‑by‑step, Windows‑first reproduction guide and starter kit.*
 
+Zhihu：https://zhuanlan.zhihu.com/p/1964827697386599766
+
 ---
 
 ## 0) Preface
