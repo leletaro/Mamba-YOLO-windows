@@ -1,96 +1,262 @@
-# [AAAI2025] Mamba YOLO: A Simple Baseline for Object Detection with State Space Model
+# Mamba‑YOLO & vMamba on Windows
 
-![Python 3.11](https://img.shields.io/badge/python-3.11-g) ![pytorch 2.3.0](https://img.shields.io/badge/pytorch-2.3.0-blue.svg) [![docs](https://img.shields.io/badge/docs-latest-blue)](README.md)
+*A step‑by‑step, Windows‑first reproduction guide and starter kit.*
 
+---
 
-<div align="center">
-  <img src="./asserts/mambayolo.jpg" width="1200px"/>
-</div>
+## 0) Preface
 
-## Model Zoo
+Mamba‑based networks (Mamba, vMamba) are often reproduced smoothly on Linux thanks to a mature open‑source toolchain. On Windows, however, developers frequently hit package conflicts, CUDA/driver mismatches, and extension build hurdles. This README provides a **fully guided Windows workflow** to get **Mamba‑YOLO** training and inference running with **GPU acceleration**, without compiling custom CUDA when possible. It mirrors the tutorial content you referenced and adapts it into a clean, repository‑ready document.
 
-We've pre-trained YOLO-World-T/M/L from scratch and evaluate on the `MSCOCO2017 val`. 
+> **Who is this for?** Windows users who want a working environment for Mamba‑YOLO/vMamba + YOLO training with minimal friction.
 
-### Inference on MSCOCO2017 dataset
+---
 
+## 1) Highlights
 
-| model | Params| FLOPs | ${AP}^{val}$ | ${AP}_{{50}}^{val}$ | ${AP}_{{75}}^{val}$ | ${AP}_{{S}}^{val}$ | ${AP}_{{M}}^{val}$ | ${AP}_{{L}}^{val}$ |
-| :------------------------------------------------------------------------------------------------------------------- | :------------------- | :----------------- | :--------------: | :------------: | :------------: | :------------: | :-------------: | :------------: |
-| [Mamba YOLO-T](./ultralytics/cfg/models/mamba-yolo/Mamba-YOLO-T.yaml) | 5.8M | 13.2G |       44.5       |          61.2           |          48.2           |          24.7          |          48.8          |          62.0          |
-| [Mamba YOLO-M](./ultralytics/cfg/models/mamba-yolo/Mamba-YOLO-B.yaml) | 19.1M | 45.4G  |       49.1       |          66.5           |          53.5           |          30.6          |          54.0          |          66.4          |
-| [Mamba YOLO-L](./ultralytics/cfg/models/mamba-yolo/Mamba-YOLO-L.yaml)  | 57.6M | 156.2G |       52.1       |          69.8           |          56.5           |          34.1          |          57.3          |          68.1          |
+* ✅ **Windows‑validated** setup—commands and versions tested on Windows.
+* ✅ **Pre‑packaged artifacts** (wheel/folders) to avoid compiling CUDA ops where possible.
+* ✅ **MS COCO 2017 in YOLO format (optional)** for plug‑and‑play training.
+* ✅ **VS Code‑first workflow** with a reproducible interpreter and run configuration.
+* ✅ **Troubleshooting** for common Windows‑only issues (NumPy 2.x ABI, `selective_scan`, Triton on Windows, etc.).
 
+---
 
+## 2) Repository Structure (suggested)
 
-
-## Getting started
-
-### 1. Installation
-
-Mamba YOLO is developed based on `torch==2.3.0` `pytorch-cuda==12.1` and `CUDA Version==12.6`. 
-
-#### 2.Clone Project 
-
-```bash
-git clone https://github.com/HZAI-ZJNU/Mamba-YOLO.git
+```
+Mamba-YOLO-windows/
+├─ attachments/               # Prebuilt wheels and vendor folders for Windows
+│  ├─ triton-2.0.0-cp310-cp310-win_amd64.whl
+│  ├─ causal-conv1d/          # vendored source (tag v1.1.1)
+│  └─ mamba/                  # vendored source (tag v1.1.1)
+├─ scripts/
+│  ├─ verify_cuda.py          # quick CUDA sanity check
+│  ├─ mytest001.py            # minimal inference/test script
+│  ├─ mytrain001.py           # simple training launcher (edit your YAML path)
+│  └─ mbyolo_train.py         # lightly adapted original trainer
+├─ ultralytics/               # framework code (with local modules)
+├─ datasets/                  # indexes & samples (no big files tracked)
+├─ assets/                    # screenshots, figures
+└─ README.md
 ```
 
-#### 3.Create and activate a conda environment.
-```bash
-conda create -n mambayolo -y python=3.11
-conda activate mambayolo
+---
+
+## 3) Prerequisites
+
+* **Windows 10/11**, up‑to‑date NVIDIA driver.
+* **Anaconda/Miniconda**.
+* **CUDA 11.8 runtime** via conda (we will not install a full CUDA Toolkit system‑wide).
+* **Python 3.10** recommended.
+
+> If you are brand new to Anaconda on Windows, see: [https://blog.csdn.net/Natsuago/article/details/143081283](https://blog.csdn.net/Natsuago/article/details/143081283)
+
+---
+
+## 4) Environment Setup (GPU, PyTorch, CUDA)
+
+Open **Anaconda Prompt** and create the environment:
+
+```bat
+conda create -n mamba python=3.10 -y
+conda activate mamba
+
+:: CUDA 11.8 runtime (nvidia channel)
+conda install -c nvidia cudatoolkit==11.8 -y
+
+:: Match PyTorch to CUDA 11.8
+pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 ^
+  --index-url https://download.pytorch.org/whl/cu118
+
+:: Helpful extras
+conda install -y packaging
+conda install -y -c "nvidia/label/cuda-11.8.0" cuda-nvcc
 ```
 
-#### 4. Install torch
+Sanity‑check CUDA:
 
-```bash
-pip3 install torch===2.3.0 torchvision torchaudio
+```python
+# scripts/verify_cuda.py
+import torch
+print("torch:", torch.__version__)
+print("cuda available:", torch.cuda.is_available())
+print("cuda version:", torch.version.cuda)
 ```
 
-#### 5. Install Dependencies
-```bash
-pip install seaborn thop timm einops
-cd selective_scan && pip install . && cd ..
-pip install -v -e .
+Expected: `cuda available: True`.
+
+> **Tip**: Pin **NumPy < 2.0** in Windows scientific stacks to avoid ABI issues with native extensions:
+> `pip install "numpy<2" -U`
+
+---
+
+## 5) Get the Code
+
+This tutorial assumes two codebases:
+
+* **Original project**: *(add the upstream link)*
+  `TODO: https://github.com/…`
+* **Windows‑ready tutorial repo** (this project): *(add your repo link)*
+  `TODO: https://github.com/…`
+
+If you previously failed to build from upstream on Windows, **start from this Windows‑ready repo** which vendors key dependencies.
+
+---
+
+## 6) Install Windows‑friendly Dependencies
+
+### 6.1 Triton (prebuilt wheel)
+
+Copy the wheel from `attachments/` to a convenient path (or use absolute path), then:
+
+```bat
+pip install attachments\triton-2.0.0-cp310-cp310-win_amd64.whl
 ```
 
-#### 6. Prepare MSCOCO2017 Dataset
-Make sure your dataset structure as follows:
-```
-├── coco
-│   ├── annotations
-│   │   ├── instances_train2017.json
-│   │   └── instances_val2017.json
-│   ├── images
-│   │   ├── train2017
-│   │   └── val2017
-│   ├── labels
-│   │   ├── train2017
-│   │   ├── val2017
+### 6.2 causal-conv1d (tag v1.1.1)
+
+Option A — **Vendored folder (recommended):**
+
+```bat
+cd attachments\causal-conv1d
+pip install .
 ```
 
-#### 7. Training Mamba-YOLO-T
-```bash
-python mbyolo_train.py --task train --data ultralytics/cfg/datasets/coco.yaml \
- --config ultralytics/cfg/models/mamba-yolo/Mamba-YOLO-T.yaml \
---amp  --project ./output_dir/mscoco --name mambayolo_n
+Option B — fresh clone (if you prefer):
+
+```bat
+git clone https://github.com/…/causal-conv1d.git
+cd causal-conv1d
+git checkout v1.1.1
+pip install .
 ```
 
-## Acknowledgement
+### 6.3 mamba (tag v1.1.1)
 
-This repo is modified from open source real-time object detection codebase [Ultralytics](https://github.com/ultralytics/ultralytics). The selective-scan from [VMamba](https://github.com/MzeroMiko/VMamba).
+Option A — **Vendored folder (recommended):**
 
-## Citations
-If you find [Mamba-YOLO](https://github.com/HZAI-ZJNU/Mamba-YOLO) is useful in your research or applications, please consider giving us a star 🌟 and citing it.
-
-```bibtex
-@misc{wang2024mambayolossmsbasedyolo,
-      title={Mamba YOLO: SSMs-Based YOLO For Object Detection}, 
-      author={Zeyu Wang and Chen Li and Huiying Xu and Xinzhong Zhu},
-      year={2024},
-      eprint={2406.05835},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2406.05835}, 
-}
+```bat
+cd ..\mamba
+pip install .
 ```
+
+Option B — fresh clone:
+
+```bat
+git clone https://github.com/state-spaces/mamba.git
+cd mamba
+git checkout v1.1.1
+pip install .
+```
+
+> Using the vendored sources avoids compiling extra CUDA ops on Windows.
+
+---
+
+## 7) VS Code Setup & Quick Test
+
+1. Open the folder `Mamba-YOLO-windows/` in **VS Code**.
+2. Select interpreter: **Python: Select Interpreter → mamba** (the conda env).
+3. Run `scripts/mytest001.py`.
+
+### If you see `AttributeError: 'str' object has no attribute 'contiguous'`
+
+This typically comes from a call to `.contiguous()` on a Python string inside `causal_conv1d_interface.py`. Patch it so only tensors are made contiguous:
+
+```python
+# In your site-packages: causal_conv1d/causal_conv1d_interface.py
+# (e.g., C:\\Users\\<YOU>\\anaconda3\\envs\\mamba\\lib\\site-packages\\causal_conv1d\\)
+
+def _to_contig(x):
+    return x.contiguous() if hasattr(x, "contiguous") else x
+
+# Before (problematic):
+# out = causal_conv1d_cuda.causal_conv1d(x.contiguous(), w.contiguous(), padding.contiguous())
+
+# After (safe):
+out = causal_conv1d_cuda.causal_conv1d(_to_contig(x), _to_contig(w), _to_contig(padding))
+```
+
+Close and reopen the terminal (or run `cls`) and try again. You should see **success** in the test.
+
+---
+
+## 8) Training
+
+### 8.1 Minimal launcher
+
+Edit your dataset YAML path in `scripts/mytrain001.py` (around line ~18) and run:
+
+```bat
+python scripts\mytrain001.py --data path\to\your_dataset.yaml --img 640 --epochs 100
+```
+
+Example dataset YAML (YOLO format):
+
+```yaml
+# datasets/pavement.yaml
+path: D:/datasets/pavement
+train: images/train
+val: images/val
+# test: images/test
+nc: 6
+names: ["crack", "pothole", "patch", "rutting", "manhole", "other"]
+```
+
+> If you are new to YOLO custom datasets, it helps to review a YOLO data tutorial before returning here to train with Mamba‑YOLO.
+
+### 8.2 Original (lightly adapted) trainer
+
+You can also run the adapted script which mirrors the upstream training logic:
+
+```bat
+python scripts\mbyolo_train.py --data datasets\pavement.yaml --img 896 --epochs 300
+```
+
+> **Note**: This repo optionally ships **MS COCO 2017 in YOLO format** (or data indexes) for a plug‑and‑play baseline. Replace `--data` accordingly.
+
+---
+
+## 9) Tips & Known Pitfalls (Windows)
+
+* **NumPy 2.x ABI**: Some compiled wheels built against NumPy 1.x will fail under NumPy 2.x. Pin with `pip install "numpy<2" -U`.
+* **`selective_scan` unavailable**: If you see `ImportError: selective_scan is unavailable…`, you are loading code that expects `mamba-ssm>=2.x`. Prefer the **vendored `mamba/`** in this repo, or install `mamba-ssm` and its CUDA extensions per their docs (Linux is easier). On Windows, avoid compiling if possible.
+* **CUDA/driver mismatch**: Ensure your NVIDIA driver supports CUDA 11.8. Use the PyTorch wheel matching `cu118`.
+* **Triton on Windows**: Use the provided wheel; upstream support for certain Triton builds on Windows is limited.
+* **`AttributeError: 'str' … contiguous`**: Apply the `causal-conv1d` patch above so that only tensors call `.contiguous()`.
+
+---
+
+## 10) Results & Benchmarks (placeholders)
+
+Add your own tables/figures once you finish experiments:
+
+```
+Model            | imgsz | Epochs | mAP@0.5 | Speed (ms/img, 4090) | Notes
+----------------|-------|--------|---------|------------------------|------
+Mamba‑YOLO‑T     | 896   | 300    |  —      |  —                     |
+Mamba‑YOLO‑S     | 896   | 300    |  —      |  —                     |
+```
+
+---
+
+## 11) Acknowledgements
+
+* Thanks to the Zhihu author **行休** for the insightful article that inspired these Windows‑oriented instructions.
+* Thanks to the authors and maintainers of **Mamba**, **vMamba**, **Ultralytics/YOLO**, and related libraries.
+
+---
+
+## 12) License
+
+Specify your license here. Example: MIT License.
+`TODO: choose a license`
+
+---
+
+## 13) Contacts & Links
+
+* Original upstream repository: `TODO add link`
+* This Windows‑ready repo: `TODO add link`
+* Issues: please open a GitHub issue with the full console log and environment info (Windows version, driver version, `torch.__version__`, `torch.version.cuda`).
