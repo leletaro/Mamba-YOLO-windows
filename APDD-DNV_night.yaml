@@ -1,0 +1,17 @@
+# dataset path
+#path: /home/yutian/datasets_railway/images
+#train: /home/yutian/datasets_railway/images/train  # path + train
+#val: /home/yutian/datasets_railway/images/val # path + val
+#test: /home/yutian/datasets_railway/images/test # path + test
+path: G:\All_DATASET\\APDD-Night  # dataset root dir
+train: images//train # train images (relative to 'path') 128 images
+val: images//val # val images (relative to 'path') 128 images
+test: # test images (optional)
+
+# Classes
+names:
+  0: Cat
+  1: Dog
+  2: Dinosaur
+  3: Piglet
+  4: Elephant
